@@ -1,0 +1,40 @@
+Experiments with white_wine, 5000 samples by rejection_sampling compared with other 5000 samples by rejection_sampling
+
+
+{"l1_divergence": {
+  "fixed acidity": 0.05099999999999998,
+  "volatile acidity": 0.04700000000000001,
+  "citric acid": 0.03719999999999999,
+  "residual sugar": 0.043000000000000003,
+  "chlorides": 0.029799999999999997,
+  "free sulfur dioxide": 0.05340000000000001,
+  "total sulfur dioxide": 0.053599999999999995,
+  "density": 0.052400000000000016,
+  "pH": 0.044199999999999996,
+  "sulphates": 0.05660000000000001,
+  "alcohol": 0.0548},
+
+
+
+ "max_symmetric_D_kl": {"fixed acidity": 0.027061953101076522,
+  "volatile acidity": 0.02398508471505949,
+  "citric acid": 0.02221968580640646,
+  "residual sugar": 0.025735438559093837,
+  "chlorides": 0.012762201535925192,
+  "free sulfur dioxide": 0.027967380070775063,
+  "total sulfur dioxide": 0.039042040438140475,
+  "density": 0.03356242092504266,
+  "pH": 0.0345770930428564,
+  "sulphates": 0.0364579392209804,
+  "alcohol": 0.0309997925881469},
+ "two-sample Kolmogorov-Smirnov test": {"fixed acidity": (1, 0.5936767491197451),
+  "volatile acidity": (1, 0.24919163163434574),
+  "citric acid": (1, 0.901388591127366),
+  "residual sugar": (1, 0.95721723072851),
+  "chlorides": (1, 0.327510623300811),
+  "free sulfur dioxide": (0, 0.0061741214537172585),
+  "total sulfur dioxide": (1, 0.6272175062405767),
+  "density": (1, 0.7764175867140878),
+  "pH": (1, 0.8643325152980597),
+  "sulphates": (1, 0.15550390805241585),
+  "alcohol": (1, 0.7764175867140878)}}
