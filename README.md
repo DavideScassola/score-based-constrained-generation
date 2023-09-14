@@ -1,5 +1,5 @@
 # Score Based Constrained Generation
-Research project on costrained generation with unconditional models
+Research project on costrained generation with unconditional score based models
 
 ## Installation
 We suggest creating a python virtual environment with Python3.10, then after activating the environment type:
