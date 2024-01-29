@@ -13,11 +13,15 @@ from .sde import Sde
 # TODO: try scipy ode solvers
 # TODO: try https://www.wikiwand.com/en/Stochastic_differential_equation
 
+DEFAULT_TARGET_SNR = 0.16  # TODO: another hyperparameter that should be settable
+DEFAULT_CLEANING_SNR = 0.16
 
-def langevin_update(*, x: torch.Tensor, score: torch.Tensor):
+
+def langevin_update(
+    *, x: torch.Tensor, score: torch.Tensor, target_snr=DEFAULT_TARGET_SNR
+):
     # TODO: it doesn't work properly
     alpha = 1  # TODO: this works only for VE sde
-    target_snr = 0.16  # TODO: another hyperparameter that should be settable
     noise = torch.randn_like(x)
     grad_norm = torch.norm(score.reshape(score.shape[0], -1), dim=-1).mean()
     noise_norm = torch.norm(noise.reshape(noise.shape[0], -1), dim=-1).mean()
@@ -26,36 +30,16 @@ def langevin_update(*, x: torch.Tensor, score: torch.Tensor):
 
 
 def langevin_dynamics(
-    *, x: torch.Tensor, t: float, score_function: ScoreFunction, steps: int
-):
-    it = range(steps) if steps < 1000 else tqdm(range(steps), desc="Langevyn cleaning")
-    for _ in it:
-        langevin_update(x=x, score=score_function(X=x, t=t))
-
-
-def langevin_cleaning(
     *,
     x: torch.Tensor,
     t: float,
     score_function: ScoreFunction,
-    patience: int,
-    evaluator: Callable,
-) -> None:
-    waiting_time = 0
-    v_max = evaluator(x=x).mean().item()
-
-    pbar = tqdm(total=patience, desc="Langevyn cleaning...")
-    while waiting_time < patience:
+    steps: int,
+    snr=DEFAULT_CLEANING_SNR,
+):
+    it = range(steps) if steps < 1000 else tqdm(range(steps), desc="Langevin cleaning")
+    for _ in it:
         langevin_update(x=x, score=score_function(X=x, t=t))
-        v = evaluator(x=x).mean().item()
-        if v > v_max:
-            v_max = v
-            waiting_time = 0
-            pbar.reset()
-        else:
-            waiting_time = waiting_time + 1
-            pbar.update()
-    pbar.close()
 
 
 class SdeSolver:
@@ -69,6 +53,11 @@ class SdeSolver:
     ):
         x += self.dx(sde=sde, score=score, t=t, x=x, dt=dt)
 
+    def noise_reinjection(
+        self, *, x: torch.Tensor, sde: Sde, t: float, dt: float
+    ) -> None:
+        x = sde.sde_step(X=x, t=t, dt=dt)
+
     def solve(
         self,
         *,
@@ -79,6 +68,8 @@ class SdeSolver:
         T: float = 1.0,
         corrector_steps: int = 0,
         final_corrector_steps: int = 0,
+        final_corrector_snr: float = DEFAULT_CLEANING_SNR,
+        per_step_self_recurrence_steps: int = 0,
     ) -> torch.Tensor:
         x = X_0.clone()
         dt = T / steps
@@ -89,12 +80,20 @@ class SdeSolver:
                 x=x, t=t, score_function=score_function, steps=corrector_steps
             )
             self.update(x=x, sde=sde, score=score_function(X=x, t=t), t=t, dt=dt)
+            if t - dt > MINIMUM_SAMPLING_T:
+                for _ in range(per_step_self_recurrence_steps):
+                    self.noise_reinjection(x=x, sde=sde, t=t - dt, dt=dt)
+                    self.update(
+                        x=x, sde=sde, score=score_function(X=x, t=t), t=t, dt=dt
+                    )
+
         if final_corrector_steps:
             langevin_dynamics(
                 x=x,
                 t=MINIMUM_SAMPLING_T,
                 score_function=score_function,
                 steps=final_corrector_steps,
+                snr=final_corrector_snr,
             )
         return x
 
@@ -108,6 +107,8 @@ class SdeSolver:
         n_samples: int,
         corrector_steps: int = 0,
         final_corrector_steps: int = 0,
+        final_corrector_snr: float = DEFAULT_CLEANING_SNR,
+        per_step_self_recurrence_steps: int = 0,
     ) -> torch.Tensor:
         X_0 = sde.prior_sampling(
             shape=score_function.get_shape(), n_samples=n_samples
@@ -120,6 +121,8 @@ class SdeSolver:
             steps=steps,
             corrector_steps=corrector_steps,
             final_corrector_steps=final_corrector_steps,
+            per_step_self_recurrence_steps=per_step_self_recurrence_steps,
+            final_corrector_snr=final_corrector_snr,
         )
 
 

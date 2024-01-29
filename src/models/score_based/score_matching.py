@@ -140,7 +140,7 @@ def score_matching(
         dataset=tensor_train_set,
         batch_size=optimization.batch_size,
         shuffle=True,
-        drop_last=True,
+        drop_last=False,
     )
     score_model.train(True)
     optimizer = optimization.build_optimizer(score_model.parameters())

@@ -9,7 +9,7 @@ from src.constraints.real_logic import Product as Logic
 from src.models.score_based.sdes.sampler import EulerMethod
 from src.util import find, names_index_map
 
-model_path = find(str(MODELS_FOLDER), pattern="*white_wine*")
+model_path = find(str(MODELS_FOLDER), pattern="*white_wine_sliced")
 
 i = names_index_map("data/wine_quality_white.csv")
 
@@ -49,7 +49,7 @@ generation_options = dict(
 )
 
 CONFIG = ConstrainedGenerationConfig(
-    name="white_wine",
+    name="white_wine_LI",
     constraint=constraint,
     model_path=model_path,
     generation_options=generation_options,

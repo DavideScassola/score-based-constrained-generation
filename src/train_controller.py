@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 from src.constants import CONFIG_FILE_NAME, MODELS_FOLDER
-from src.util import create_experiment_folder
+from src.util import create_experiment_folder, set_seeds
 
 from .train_config import TrainConfig, getConfig
 
@@ -39,5 +39,7 @@ def store_results(*, config_file: str | Path, config: TrainConfig):
 
 def run_model_training(config_file: str):
     config = getConfig(config_file)
+    if config.seed:
+        set_seeds(config.seed)
     config.model.train(config.dataset)
     store_results(config_file=config_file, config=config)

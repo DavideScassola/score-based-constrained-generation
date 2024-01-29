@@ -14,12 +14,15 @@ from torch import Tensor
 
 from src.constants import MINIMUM_SAMPLING_T
 from src.constraints.constraint import Constraint
-from src.util import l1_divergence, max_symmetric_D_kl, store_json, upscale
+from src.util import (l1_divergence, load_json, max_symmetric_D_kl, store_json,
+                      upscale)
 
 SAMPLES_NAME = "samples.csv"
 CORRELATIONS_NAME = "correlations"
 HISTOGRAMS_NAME = "histograms"
+COORDINATES_NAME = "coordinates"
 STATS_NAME = "stats.json"
+SUMMARY_STATS_NAME = "stats_summary.json"
 REPORT_FOLDER_NAME = "report"
 IMAGE_FORMAT = "png"
 
@@ -45,6 +48,7 @@ def correlation_matrix_similarities(df1: pd.DataFrame, df2: pd.DataFrame):
         # "pearson corr": stats.pearsonr(c1, c2),
         # "spearman corr": stats.spearmanr(c1, c2),
         "average l1": np.mean(abs(c1 - c2)),
+        "median l1": np.median(abs(c1 - c2)),
     }
 
 
@@ -96,6 +100,42 @@ def kde_plot(
     ax.plot(x, density, **plt_args)
 
 
+def coordinates_comparison(
+    *,
+    df_generated: pd.DataFrame,
+    df_train: pd.DataFrame,
+    path: Path,
+    name_generated="generated",
+    name_original="original",
+    **kwargs,
+):
+    color = {
+        name_original: "blue",
+        name_generated: "orange",
+    }
+
+    df = {
+        name_original: df_train.sample(frac=1),
+        name_generated: df_generated,
+    }
+
+    n = min(len(df_generated), len(df_train))
+
+    for name in (name_original, name_generated):
+        plt.scatter(
+            df[name].iloc[:n, 0],
+            df[name].iloc[:n, 1],
+            alpha=0.5,
+            color=color[name],
+            label=name,
+            s=0.1,
+        )
+
+    plt.legend()
+    plt.savefig(path / Path(f"{COORDINATES_NAME}.{IMAGE_FORMAT}"))
+    plt.close()
+
+
 def bins(s: pd.Series):
     return np.linspace(min(s), max(s), int(len(s) ** 0.5))
 
@@ -120,7 +160,7 @@ def histograms_comparison(
     name_original="original",
     **kwargs,
 ):
-    constraint = kwargs["constraint"]
+    constraint = kwargs["constraint"] if "constraint" in kwargs else None
 
     n = len(df_generated.columns)
     fig, axes = plt.subplots(n, 1, sharex=False)
@@ -149,6 +189,8 @@ def histograms_comparison(
             start = start
             end = end
             common_args = dict(x=c, stat="density", alpha=0.5, bins=b)
+            if df_train[c].std() == 0.0:
+                del common_args["bins"]
 
         ax_true = sns.histplot(
             ax=axes[i], data=df_train, label=name_original, **common_args
@@ -156,26 +198,28 @@ def histograms_comparison(
 
         bandwidth = min(df_train[c].std(), df_generated[c].std()) / 10
 
-        kde_plot(
-            df_train[c],
-            ax=axes[i],
-            start=start,  # type: ignore
-            end=end,  # type: ignore
-            kde_args={"bandwidth": bandwidth},
-            plt_args={"color": "blue", "alpha": 0.5, "linestyle": "-"},
-        )
+        if df_train[c].std() > 0:
+            kde_plot(
+                df_train[c],
+                ax=axes[i],
+                start=start,  # type: ignore
+                end=end,  # type: ignore
+                kde_args={"bandwidth": bandwidth},
+                plt_args={"color": "blue", "alpha": 0.5, "linestyle": "-"},
+            )
 
         ax_generated = sns.histplot(
             ax=axes[i], data=df_generated, label=name_generated, **common_args
         )
-        kde_plot(
-            df_generated[c],
-            ax=axes[i],
-            start=start,  # type: ignore
-            end=end,  # type: ignore
-            kde_args={"bandwidth": bandwidth},
-            plt_args={"color": "orange", "alpha": 0.8, "linestyle": "-"},
-        )
+        if df_generated[c].std() > 0:
+            kde_plot(
+                df_generated[c],
+                ax=axes[i],
+                start=start,  # type: ignore
+                end=end,  # type: ignore
+                kde_args={"bandwidth": bandwidth},
+                plt_args={"color": "orange", "alpha": 0.8, "linestyle": "-"},
+            )
 
         if constraint and n == 1 and not is_categorical:
             constraint_plot(
@@ -406,3 +450,25 @@ def satisfaction_plot(
     plt.hist(satisfaction, alpha=0.8, **kwargs)
     plt.savefig(f"{str(path)}/constraint_satisfaction_{label}.{IMAGE_FORMAT}")
     plt.close()
+
+
+def summary_report(path: Path):
+    stats = load_json(path / STATS_NAME)
+    summary_stats = {}
+
+    if "constraint_value" in stats["columnwise_comparison"]["l1_divergence"]:
+        del stats["columnwise_comparison"]["l1_divergence"]["constraint_value"]
+    summary_stats["l1_divergence"] = stats["columnwise_comparison"]["l1_divergence"]
+    
+    if "global_comparison" in stats:
+        summary_stats["correlations_l1"] = stats["global_comparison"][
+            "correlation matrix similarity"
+        ]["average l1"]
+
+    l1 = pd.Series(summary_stats["l1_divergence"])
+
+    summary_stats["l1_divergence_median"] = l1.median()
+    summary_stats["l1_divergence_mean"] = l1.mean()
+    summary_stats["l1_divergence_max"] = l1.max()
+
+    store_json(summary_stats, file=path / Path(SUMMARY_STATS_NAME))

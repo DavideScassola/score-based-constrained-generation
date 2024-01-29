@@ -4,11 +4,13 @@ import json
 import math
 import os
 import random
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from types import ModuleType
 from typing import Callable, Tuple
 
+import GPUtil
 import numpy as np
 import torch
 
@@ -49,23 +51,35 @@ def create_experiment_folder(*, path: Path, postfix: str | None = None) -> Path:
     return experiment_folder
 
 
+@contextmanager
+def requires_grad(X, *, reset_grad: bool):
+    original_state = X.requires_grad
+    was_grad_enabled = torch.is_grad_enabled()
+    torch.set_grad_enabled(True)
+    X.requires_grad = True
+    if reset_grad:
+        X.grad = None
+    try:
+        yield X
+    finally:
+        X.requires_grad = original_state
+        torch.set_grad_enabled(was_grad_enabled)
+        if reset_grad:
+            X.grad = None
+
+
 def gradient(
     *, f: Callable[[torch.Tensor], torch.Tensor], X: torch.Tensor
 ) -> torch.Tensor:
     # TODO: Check if all of this boilerplate is necessary
-    was_grad_enabled = torch.is_grad_enabled()
-    torch.set_grad_enabled(True)
-    X.requires_grad = True
-    X.grad = None
 
-    value = f(X).sum()
-    value.backward()
-    assert torch.isfinite(value), f(X)
-    grad = X.grad
+    with requires_grad(X, reset_grad=True):
+        value = f(X).sum()
+        value.backward()
+        # TODO: check if gradient flows only with respect to X!
+        assert torch.isfinite(value), f(X)
+        grad = X.grad
 
-    X.grad = None
-    X.requires_grad = False
-    torch.set_grad_enabled(was_grad_enabled)
     return grad  # type: ignore
 
 
@@ -75,6 +89,17 @@ def upscale(image, n=20):
     for j in range(image.shape[0]):
         for k in range(image.shape[1]):
             new_data[j * n : (j + 1) * n, k * n : (k + 1) * n] = image[j, k]
+
+    return new_data
+
+
+def downscale(image, n=20):
+    shape = np.array(image.shape) // n
+    new_data = np.zeros(shape)
+
+    for j in range(shape[0]):
+        for k in range(shape[1]):
+            new_data[j, k] = np.mean(image[j * n : (j + 1) * n, k * n : (k + 1) * n])
 
     return new_data
 
@@ -170,3 +195,24 @@ def set_seeds(seed: int):
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
+
+
+def get_available_device(mem_required: float = 0.05, verbose: bool = False):
+    if not torch.cuda.is_available():
+        return "cpu"
+
+    devices = GPUtil.getGPUs()
+
+    device_usages = [
+        (device.id, device.memoryUsed / device.memoryTotal) for device in devices
+    ]
+
+    device_usages.sort(key=lambda x: x[1])
+
+    if device_usages[0][1] > 1 - mem_required:
+        return "cpu"
+
+    out = "cuda:" + str(device_usages[0][0])
+    if verbose:
+        print("\033[92m" + f"Using {out} ... let's g{'o'*69}" + "\033[0m")
+    return out

@@ -16,9 +16,7 @@ from .model import Model
 
 
 class TabularModel(Model):
-    def __init__(
-        self, *, tensor_preprocessors: List[TensorPreprocessor] = [], numpy=False
-    ) -> None:
+    def __init__(self, *, tensor_preprocessors: List[TensorPreprocessor] = []) -> None:
         super().__init__()
         self.tensor_preprocessors = tensor_preprocessors
         self.df2tensor = ToTensor()
@@ -30,12 +28,6 @@ class TabularModel(Model):
             self.df2tensor.fit_transform(df), preprocessors=self.tensor_preprocessors
         )
         self._train(X)
-
-    def generate(self, n_samples: int, **kwargs) -> pd.DataFrame:
-        samples = self._generate(n_samples, **kwargs)
-        return self.df2tensor.reverse_transform(
-            composed_inverse_transform(samples, preprocessors=self.tensor_preprocessors)
-        )
 
     def generate_report(
         self, *, path: str | Path, dataset: Dataset, generation_options: dict
@@ -56,6 +48,14 @@ class TabularModel(Model):
             correlations_comparison,
         ):
             comparison(
+                df_generated=samples,
+                df_train=df_train,
+                path=report_folder,
+                model=self,
+            )
+
+        if len(samples.shape) == 2 and samples.shape[1] == 2:
+            coordinates_comparison(
                 df_generated=samples,
                 df_train=df_train,
                 path=report_folder,

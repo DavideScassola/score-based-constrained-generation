@@ -25,6 +25,7 @@ model = TimeSeriesScoreBasedSde(
         "activation_layer": torch.nn.SiLU,
         "add_prior_score_bias": True,
         "rescale_factor_limit": 1,
+        "batch_norm": True
     },
     optimization=Optimization(
         epochs=2000,

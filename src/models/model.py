@@ -7,7 +7,8 @@ import pandas as pd
 import torch
 
 from src.data import Dataset
-from src.preprocessors.preprocessor import Preprocessor
+from src.preprocessors.preprocessor import (Preprocessor,
+                                            composed_inverse_transform)
 
 
 class Model(ABC):
@@ -50,9 +51,9 @@ class Model(ABC):
     def train(self, dataset: Dataset):
         pass
 
-    @abstractmethod
     def generate(self, n_samples: int, **kwargs) -> pd.DataFrame:
-        pass
+        samples = self._generate(n_samples, **kwargs)
+        return composed_inverse_transform(samples, preprocessors=self.preprocessors)
 
     @abstractmethod
     def _train(self, X: torch.Tensor):

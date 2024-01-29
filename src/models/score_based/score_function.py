@@ -5,12 +5,12 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from .nn.gine_mlp import MLP as GMLP
+from src.constants import WEIGHTS_FILE
+from src.util import get_available_device
+
 from .nn.time_residual_mlp import TimeResidualMLP
 from .nn.unet import MyUNet
 from .sdes.sde import VE, Sde
-
-WEIGHTS_FILE = "model_weights"
 
 
 class ScoreFunction(ABC):
@@ -40,14 +40,21 @@ class ScoreFunction(ABC):
     def forward(self, *, X: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         pass
 
-    def __call__(self, *, X: torch.Tensor, t: torch.Tensor | float) -> torch.Tensor:
-        with torch.no_grad():
-            self.train(False)
-            if isinstance(t, float):
-                t = torch.full(
-                    size=(len(X), 1), fill_value=t, dtype=torch.float32, device=X.device
-                )
+    def __call__(
+        self, *, X: torch.Tensor, t: torch.Tensor | float, grad: bool = False
+    ) -> torch.Tensor:
+        self.train(False)
+        self.model.eval()
+        if isinstance(t, float):
+            t = torch.full(
+                size=(len(X), 1), fill_value=t, dtype=torch.float32, device=X.device
+            )
+        if grad:
             return self.forward(X=X, t=t)
+        else:
+            with torch.no_grad():
+                out = self.forward(X=X, t=t)
+            return out
 
     def get_shape(self) -> tuple:
         return self.shape
@@ -70,7 +77,9 @@ class ScoreFunction(ABC):
 
     def load_(self, path: str):
         # TODO: using safe tensors would be better
-        self.model.load_state_dict(torch.load(f"{path}/{WEIGHTS_FILE}.pth"))
+        self.model.load_state_dict(
+            torch.load(f"{path}/{WEIGHTS_FILE}.pth", map_location=self.device)
+        )
 
     def weighted_score_coefficient(self, *, X, t: torch.Tensor) -> Tensor | float:
         # experimental
@@ -103,10 +112,6 @@ class ScoreFunction(ABC):
             torch.full_like(input=std, fill_value=self.rescale_factor_limit),
         )
 
-    def prior_normal_score(self, *, X: torch.Tensor) -> torch.Tensor:
-        # TODO: one could generalize the formula for any sde
-        return -X / (1 + self.sde.sigma_max**2) if isinstance(self.sde, VE) else -X
-
 
 class MLP(ScoreFunction):
     def build_model(self, **hyperparameters) -> torch.nn.Module:
@@ -120,7 +125,7 @@ class MLP(ScoreFunction):
         output = (self.model.forward(X=scaled_X, t=t)).reshape([-1] + list(self.shape))
         nn_score = self.output_scaler(X=X, Y=output, t=t)
         if self.add_prior_score_bias:
-            return nn_score + self.prior_normal_score(X=X)
+            return nn_score + self.sde.prior_score(X=X, t=t)
         return nn_score
 
 
@@ -137,6 +142,7 @@ class GineMLP(ScoreFunction):
 
 class Unet(ScoreFunction):
     def build_model(self, **hyperparameters) -> torch.nn.Module:
+        self.device = get_available_device()
         return MyUNet(**hyperparameters).to(self.device)
 
     def forward(self, *, X: torch.Tensor, t: torch.Tensor) -> torch.Tensor:

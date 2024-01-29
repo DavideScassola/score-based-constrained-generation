@@ -10,16 +10,19 @@ from src.preprocessors.mean_std_normalizer import MeanStdNormalizer
 from src.preprocessors.rescaler import Rescaler
 from src.train_config import TrainConfig
 
-dataset = Dataset(path="MNIST", train_proportion=0.8)
+dataset = Dataset(path="MNIST", train_proportion=1.0)
 
 model = ImageScoreBasedSde(
     tensor_preprocessors=[],
     sde=VE(),
     score_function_class=Unet,
-    score_function_hyperparameters={},
+    score_function_hyperparameters={
+        "add_prior_score_bias": True,
+        "rescale_factor_limit": 10,
+    },
     optimization=Optimization(
-        epochs=250,
-        batch_size=256,
+        epochs=1000,
+        batch_size=512,
         optimizer_class=torch.optim.RAdam,
         optimizer_hyperparameters={"lr": 1e-3},
     ),
@@ -30,5 +33,8 @@ generation_options = dict(
 )
 
 CONFIG = TrainConfig(
-    name="mnist", dataset=dataset, model=model, generation_options=generation_options
+    name=f"mnist_{model.optimization.epochs}",
+    dataset=dataset,
+    model=model,
+    generation_options=generation_options,
 )

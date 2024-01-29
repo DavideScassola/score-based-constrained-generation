@@ -37,6 +37,8 @@ def refill_rejection_sampling(
         df_rejection_sampling = pd.concat(
             [df_rejection_sampling, df_rejection_sampling_new]
         )
+    else:
+        return df_rejection_sampling.iloc[: len(df)], 1.0
 
     return df_rejection_sampling.iloc[: len(df)], len(df_rejection_sampling) / (
         len(df_new) + len(df)
@@ -117,4 +119,14 @@ class TabularScoreBasedSde(ScoreBasedSde, TabularModel):
                 model=self,
             )
 
+        if len(samples.shape) == 2 and samples.shape[1] == 2:
+            coordinates_comparison(
+                df_generated=samples,
+                df_train=df_train,
+                path=report_folder,
+                model=self,
+            )
+
         self.specific_report_plots(report_folder)
+
+        summary_report(path=report_folder)

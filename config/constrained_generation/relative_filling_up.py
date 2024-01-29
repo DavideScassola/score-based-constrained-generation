@@ -16,14 +16,19 @@ LOGIC_K = 80
 STRENGTH = 1
 GRADIENT_APPROXIMATION = snr
 SEED = 1234
-MODEL = "2000"
+
+
+# Universal guidance
+universal_guidance = dict(
+    forward_guidance=False, backward_guidance_steps=0, per_step_self_recurrence_steps=0
+)
 
 
 def mnist_model_path():
     """
     Picks the last stored model
     """
-    return f"{DEFAULT_MODELS_FOLDER}/{fnmatch.filter(sorted(os.listdir(DEFAULT_MODELS_FOLDER)), '*mnist*2000*')[-1]}"
+    return f"{DEFAULT_MODELS_FOLDER}/{fnmatch.filter(sorted(os.listdir(DEFAULT_MODELS_FOLDER)), '*mnist*')[-1]}"
 
 
 """"
@@ -49,7 +54,10 @@ def relative_filling_down(x: torch.Tensor):
 
 
 constraint = Constraint(
-    f=relative_filling_down, strength=STRENGTH, gradient_mixer=GRADIENT_APPROXIMATION
+    f=relative_filling_down,
+    strength=STRENGTH,
+    gradient_mixer=GRADIENT_APPROXIMATION,
+    **universal_guidance,
 )
 
 generation_options = dict(

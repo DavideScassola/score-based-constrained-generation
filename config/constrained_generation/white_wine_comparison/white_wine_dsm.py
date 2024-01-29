@@ -1,41 +1,43 @@
-from torch import Tensor
+import os
 
 from src.constants import MODELS_FOLDER
 from src.constrained_generation_config import ConstrainedGenerationConfig
 from src.constraints.constraint import Constraint
-from src.constraints.gradient_mixer import *
+from src.constraints.gradient_mixer import (linear_interpolation,
+                                            noise_weighting, snr)
 from src.constraints.real_logic import Product as Logic
 from src.models.score_based.sdes.sampler import EulerMethod
 from src.util import find, names_index_map
 
-NAME = "eSIRS"
+model_path = find(str(MODELS_FOLDER), pattern="*white_wine_dsm")
 
-S = 0
-I = 1
+i = names_index_map("data/wine_quality_white.csv")
 
-GRAD = 7.0
-SEED = 1234
+alcohol = i["alcohol"]
+fixed_acidity = i["fixed acidity"]
+residual_sugar = i["residual sugar"]
+citric_acid = i["citric acid"]
+
+
+GRAD = 30.0
 SCORE_APPROXIMATOR = snr
+SEED = 1234
 
 universal_guidance = dict(
     forward_guidance=False, backward_guidance_steps=0, per_step_self_recurrence_steps=0
 )
 
-positive_populations = lambda x: Logic.and_(Logic.greater(x, 0.0, grad=1))
-limited_population = lambda x: Logic.and_(Logic.smaller(x.sum(dim=-1), 100.0, grad=1))
-fix_S_at_0 = lambda x: Logic.equal(x[:, 0, S], 80.0, grad=GRAD)
-fix_I_at_0 = lambda x: Logic.equal(x[:, 0, I], 10.0, grad=GRAD)
-fix_S_at_25 = lambda x: Logic.equal(x[:, 25, S], 30.0, grad=GRAD)
-
-
-def predicate(x: Tensor) -> Tensor:
-    return Logic.and_(
-        positive_populations(x),
-        limited_population(x),
-        fix_S_at_0(x),
-        fix_I_at_0(x),
-        fix_S_at_25(x),
-    )
+predicate = lambda x: Logic.and_(
+    Logic.or_(
+        Logic.in_(x[:, fixed_acidity], 5.0, 6.0, grad=GRAD),
+        Logic.in_(x[:, fixed_acidity], 8.0, 9.0, grad=GRAD),
+    ),
+    Logic.greater(x[:, alcohol], x2=11.0, grad=GRAD),
+    Logic.or_(
+        Logic.greater(x[:, residual_sugar], 5.0, grad=GRAD),
+        Logic.greater(x[:, citric_acid], 0.5, grad=GRAD),
+    ),
+)
 
 
 constraint = Constraint(
@@ -53,18 +55,17 @@ generation_options = dict(
     final_corrector_steps=2000,
 )
 
-name = NAME + "_bridging"
+name = "white_wine_dsm"
 if universal_guidance["forward_guidance"]:
     name = (
         name
         + f"_bw{universal_guidance['backward_guidance_steps']}_rs{universal_guidance['per_step_self_recurrence_steps']}"
     )
 
-
 CONFIG = ConstrainedGenerationConfig(
     name=name,
     constraint=constraint,
-    model_path=find(str(MODELS_FOLDER), pattern=f"*{NAME}*"),
+    model_path=model_path,
     generation_options=generation_options,
     seed=SEED,
 )

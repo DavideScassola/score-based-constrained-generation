@@ -11,10 +11,15 @@ SEED = 1234
 
 model_path = find(str(MODELS_FOLDER), pattern="*mixture*")
 
+universal_guidance = dict(
+    forward_guidance=False, backward_guidance_steps=0, per_step_self_recurrence_steps=0
+)
+
 constraint = Constraint(
     f=lambda x: Logic.greater(x, 0.0),
     strength=1.0,
     gradient_mixer=snr,
+    **universal_guidance  # type: ignore
 )
 
 generation_options = dict(

@@ -89,9 +89,10 @@ class Product(RealLogic):
         if len(x) == 1:
             return x[0]
         if len(x) == 2:
-            return torch.log(
-                torch.exp(x[0]) + torch.exp(x[1]) - torch.exp(x[0] + x[1]) + eps
-            )
+            small = torch.min(x[0], x[1])
+            big = torch.max(x[0], x[1])
+            return torch.log(1 + torch.exp(small - big) - torch.exp(small)) + big
+
         return cls.or_(cls.or_(x[0], x[1]), *x[2:])
 
     @classmethod

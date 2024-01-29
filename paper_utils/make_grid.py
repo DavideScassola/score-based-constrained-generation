@@ -1,12 +1,15 @@
 import os
 import sys
 
+from natsort import natsorted
 from PIL import Image
+
+TRANSPOSE = True
 
 
 def make_grid(image_folder, rows, cols):
     images = []
-    for filename in os.listdir(image_folder):
+    for filename in natsorted(os.listdir(image_folder)):
         if filename.endswith(".png"):
             img_path = os.path.join(image_folder, filename)
             img = Image.open(img_path)
@@ -22,12 +25,12 @@ def make_grid(image_folder, rows, cols):
 
     for row in range(rows):
         for col in range(cols):
-            index = row * cols + col
+            index = row * cols + col if not TRANSPOSE else col * rows + row
             collage.paste(
                 images[index], (col * images[0].width, row * images[0].height)
             )
 
-    collage.save("collage.png")
+    collage.save(f"{image_folder}/../collage_{rows}x{cols}.png")
     print("Collage saved as collage.png")
 
 

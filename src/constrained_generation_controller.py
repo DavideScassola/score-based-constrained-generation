@@ -43,6 +43,7 @@ def store_results(
         generation_options=training_config.generation_options,
         constraint=constrained_generation_config.constraint,
     )
+    model.store(folder)
     shutil.copyfile(config_file, folder / CONFIG_FILE_NAME)
 
 

@@ -5,16 +5,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from src.constants import ALLOW_LANGEVIN_CLEANING, LANGEVIN_CLEANING_PATIENCE
 from src.models.model import Model
 from src.models.score_based.nn.optimization import Optimization
 from src.models.score_based.score_function import ScoreFunction
 from src.models.score_based.score_matching import denoising_score_matching_loss
 from src.report import score_plot
-from src.util import load_json, store_json
+from src.util import get_available_device, load_json, store_json
 
 from .score_matching import loss_plot, score_matching
-from .sdes.sampler import SdeSolver, langevin_cleaning
+from .sdes.sampler import SdeSolver
 from .sdes.sde import Sde
 
 
@@ -40,7 +39,7 @@ class ScoreBasedSde(Model):
 
     def _train(self, X: torch.Tensor) -> None:
         self.shape = X.data[0].shape
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = get_available_device()
 
         self.score_model = self.score_function_class(
             shape=self.shape,
@@ -59,19 +58,18 @@ class ScoreBasedSde(Model):
     def _generate(
         self, n_samples: int, sde_solver: SdeSolver, **kwargs
     ) -> torch.Tensor:
-        x = sde_solver.sample(
-            sde=self.sde, score_function=self.score_model, n_samples=n_samples, **kwargs
+        constraint = getattr(self.score_model, "constraint", None)
+        per_step_self_recurrence_steps = (
+            0 if not constraint else constraint.per_step_self_recurrence_steps
         )
 
-        constraint = getattr(self.score_model, "constraint", None)
-        if constraint and ALLOW_LANGEVIN_CLEANING:
-            langevin_cleaning(
-                x=x,
-                t=0.0,
-                score_function=self.score_model,
-                evaluator=self.score_model.constraint,
-                patience=LANGEVIN_CLEANING_PATIENCE,
-            )
+        x = sde_solver.sample(
+            sde=self.sde,
+            score_function=self.score_model,
+            n_samples=n_samples,
+            per_step_self_recurrence_steps=per_step_self_recurrence_steps,
+            **kwargs,
+        )
 
         return x
 
@@ -85,7 +83,8 @@ class ScoreBasedSde(Model):
     def _load_(self, model_path: str) -> None:
         params = load_json(self.params_file(model_path))
         self.shape = params["shape"]
-        self.device = torch.device(params["device"])
+        # self.device = torch.device(params["device"])
+        self.device = get_available_device()
         self.score_model = self.score_function_class(
             shape=self.shape,
             sde=self.sde,

@@ -59,7 +59,8 @@ class TimeResidualMLP(torch.nn.Module):
         out_channels: int,
         hidden_channels: List[int],
         activation_layer: nn.Module,
-        time_embedding: Callable | None = classic_embedding
+        time_embedding: Callable | None = classic_embedding,
+        batch_norm: bool = False,
     ):
         super().__init__()
         # self.time_embedding = sin_cos_embedding
@@ -72,14 +73,23 @@ class TimeResidualMLP(torch.nn.Module):
         )
 
         concat_size = in_channels + t_emb_dim
-        layers = [
-            torch.nn.BatchNorm1d(num_features=concat_size),
-            FlexibleResidualBlock(
-                input_size=concat_size,
-                output_size=hidden_channels[0],
-                activation=activation_layer,
-            ),
-        ]
+        if batch_norm:
+            layers = [
+                torch.nn.BatchNorm1d(num_features=concat_size),
+                FlexibleResidualBlock(
+                    input_size=concat_size,
+                    output_size=hidden_channels[0],
+                    activation=activation_layer,
+                ),
+            ]
+        else:
+            layers = [
+                FlexibleResidualBlock(
+                    input_size=concat_size,
+                    output_size=hidden_channels[0],
+                    activation=activation_layer,
+                )
+            ]
 
         for i in range(len(hidden_channels) - 1):
             layers.append(

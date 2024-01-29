@@ -13,6 +13,7 @@ class TrainConfig:
     model: Model
     generation_options: dict
     name: str | None = None
+    seed: int | None = None
 
 
 def getConfig(path: str | Path) -> TrainConfig:

@@ -48,53 +48,57 @@ def time_series_plot(
 
 set_seeds(SEED)
 
-path = sys.argv[1]
-# config_module = load_module(path=path + '/config.py')
+paths = sys.argv[1:]
 
+print(paths)
 
-colors = {"Guidance": "orange", "No guidance": "blue"}
-x = {
-    "Guidance": np.load(path + "/report/guidance.npy"),
-    "No guidance": np.load(path + "/report/no_guidance.npy"),
-}
+if not isinstance(paths, list):
+    paths = [paths]
 
-x["Guidance"] = np.round(x["Guidance"][np.random.permutation(len(x["Guidance"]))])
-x["No guidance"] = np.round(
-    x["No guidance"][np.random.permutation(len(x["No guidance"]))]
-)
+for path in paths:
+    plt.cla()
+    colors = {"Guidance": "orange", "No guidance": "blue"}
+    x = {
+        "Guidance": np.load(path + "/report/guidance.npy"),
+        "No guidance": np.load(path + "/report/no_guidance.npy"),
+    }
 
-index = {"S": 0, "I": 1}
-
-ALPHA = 0.6
-N_SAMPLES = 10
-bridging = np.mean(np.round(x["Guidance"][:, 0, 0]) == 95.0) > 0.5
-
-stats = {}
-
-for i in ("No guidance", "Guidance"):
-    samples = np.round(x[i])
-    sub_sample = samples[:N_SAMPLES]
-    time_series_plot(
-        sub_sample, features_names=["S", "I"], color=colors[i], alpha=ALPHA, label=i
+    x["Guidance"] = np.round(x["Guidance"][np.random.permutation(len(x["Guidance"]))])
+    x["No guidance"] = np.round(
+        x["No guidance"][np.random.permutation(len(x["No guidance"]))]
     )
-    stats[f"{i} positivity"] = np.mean(positivity(samples))
-    stats[f"{i} constant population: "] = np.mean(constant_population(samples))
 
-for ax in axes:
-    ax.grid(alpha=0.4, zorder=-1)
-    ax.set_ylim(0, None)
+    index = {"S": 0, "I": 1}
 
-# print("less 20 infected: ", np.mean(less_20_infected(x["Guidance"])))
-stats["less 20 infected"] = np.mean(less_20_infected(x["Guidance"]))
-axes[1].axhline(y=20, color="r", linestyle="--", alpha=0.6, linewidth=1.0)
+    ALPHA = 0.6
+    N_SAMPLES = 10
+    bridging = np.mean(np.round(x["Guidance"][:, 0, 0]) == 95.0) > 0.5
 
+    stats = {}
 
-legend = axes[1].legend(("No guidance", "Guidance"))
-legend.legend_handles[0].set_color("blue")
-legend.legend_handles[1].set_color("orange")
-print(stats)
+    for i in ("No guidance", "Guidance"):
+        samples = np.round(x[i])
+        sub_sample = samples[:N_SAMPLES]
+        time_series_plot(
+            sub_sample, features_names=["S", "I"], color=colors[i], alpha=ALPHA, label=i
+        )
+        stats[f"{i} positivity"] = np.mean(positivity(samples))
+        stats[f"{i} constant population: "] = np.mean(constant_population(samples))
 
-plt.tight_layout(pad=0.1)
-plt.savefig(path + "/paper_plot.svg")
-store_json(stats, file=path + "/plot_stats.json")
-plt.show()
+    for ax in axes:
+        ax.grid(alpha=0.4, zorder=-1)
+        ax.set_ylim(0, None)
+
+    # print("less 20 infected: ", np.mean(less_20_infected(x["Guidance"])))
+    stats["less 20 infected"] = np.mean(less_20_infected(x["Guidance"]))
+    axes[1].axhline(y=20, color="r", linestyle="--", alpha=0.6, linewidth=1.0)
+
+    legend = axes[1].legend(("No guidance", "Guidance"))
+    legend.legend_handles[0].set_color("blue")
+    legend.legend_handles[1].set_color("orange")
+    print(stats)
+
+    plt.tight_layout(pad=0.1)
+    plt.savefig(path + "/paper_plot.svg")
+    store_json(stats, file=path + "/plot_stats.json")
+    plt.show()

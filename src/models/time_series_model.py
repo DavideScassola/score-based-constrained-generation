@@ -25,12 +25,6 @@ class TimeSeriesModel(Model):
         X = composed_fit_transform(X, preprocessors=self.tensor_preprocessors)
         self._train(X)
 
-    def generate(self, n_samples: int, **kwargs) -> torch.Tensor:
-        samples = self._generate(n_samples, **kwargs)
-        return composed_inverse_transform(
-            samples, preprocessors=self.tensor_preprocessors
-        )
-
     def generate_report(
         self, *, path: str | Path, dataset: Dataset, generation_options: dict
     ) -> None:

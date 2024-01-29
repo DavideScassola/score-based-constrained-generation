@@ -14,7 +14,17 @@ def expand_like(input: Tensor, *, like: Tensor):
     )
 
 
+def dw(dt: float, like: Tensor) -> Tensor:
+    return torch.randn_like(like) * (dt**0.5)
+
+
 class Sde(ABC):
+    """
+    dx = f(x,t)dt + g(t)dw
+    dw = eps * dt**0.5
+    eps ~ N(0,1)
+    """
+
     # TODO: in the paper T is a property of the SDE. T is probably such that
     # X_T ~ prior, but why not fixing T=1 and defining the sde such that x_t=1
     # ~ pior ?
@@ -43,7 +53,22 @@ class Sde(ABC):
 
     @abstractmethod
     def denoising(self, *, t: Tensor, score: Tensor, X: Tensor) -> Tensor:
+        """
+        remember this:
+            score(xt, t) = (mean[sde(t, x0)] - xt) / std[sde(t, x0)]**2
+
+        then:
+            mean[sde(t, x0)] = score(xt, t) * std[sde(t, x0)]**2 + xt
+        """
         pass
+
+    def score_from_denoising(self, *, t: Tensor, X: Tensor, x0: Tensor) -> Tensor:
+        """
+        remember this:
+            score(xt, t) = (mean[sde(t, x0)] - xt) / std[sde(t, x0)]**2
+        """
+        mean_xt, std_xt = self.transition_kernel_mean_std(X=x0, t=t)
+        return (mean_xt - X) / (std_xt**2)
 
     def transition_kernel_mean_std(
         self, *, X: Tensor, t: Tensor
@@ -52,8 +77,19 @@ class Sde(ABC):
             "This sde has not an explicit gaussian transition kernel"
         )
 
+    def sde_step(self, *, X: Tensor, t: float, dt: float) -> Tensor:
+        """
+        Samples from the transition kernel of the SDE: q(X_t+1 | X_t)
+        """
+        dx = self.f(X=X, t=t) * dt + self.g(t=t) * dw(dt, like=X)
+        return X + dx
+
     def reverse_f(self, *, X: Tensor, t: float, score: Tensor) -> Tensor:
         return self.f(X=X, t=t) - ((self.g(t=t)) ** 2) * score
+
+    @abstractmethod
+    def prior_score(self, *, X: Tensor, t: Tensor) -> Tensor:
+        pass
 
 
 class VE(Sde):
@@ -85,6 +121,9 @@ class VE(Sde):
     def denoising(self, *, t: Tensor, score: Tensor, X: Tensor) -> Tensor:
         std = self.transition_kernel_mean_std(X=X, t=t)[1]
         return X + score * (std**2)
+
+    def prior_score(self, *, X: Tensor, t: Tensor) -> Tensor:
+        return -X / (1 + self.sigma_max**2)
 
 
 class subVP(Sde):
@@ -137,3 +176,6 @@ class subVP(Sde):
         )
         std = 1 - torch.exp(2.0 * log_mean_coeff)
         return (X + score * (std**2)) / torch.exp(log_mean_coeff)
+
+    def prior_score(self, *, X: Tensor, t: Tensor) -> Tensor:
+        return -X
