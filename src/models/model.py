@@ -3,12 +3,14 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import List
 
-import pandas as pd
 import torch
 
+from src.constraints.constraint import Constraint
 from src.data import Dataset
 from src.preprocessors.preprocessor import (Preprocessor,
-                                            composed_inverse_transform)
+                                            composed_inverse_transform,
+                                            composed_transform)
+from src.util import get_available_device
 
 
 class Model(ABC):
@@ -47,11 +49,30 @@ class Model(ABC):
     def specific_report_plots(self, path: Path):
         pass
 
-    @abstractmethod
-    def train(self, dataset: Dataset):
-        pass
+    def get_preprocessed_data(
+        self,
+        *,
+        dataset: Dataset | None = None,
+        train: bool = True,
+        fit: bool | None = None,
+        device: str | torch.device,
+    ) -> torch.Tensor:
+        if fit is None:
+            fit = train
+        if not hasattr(self, "dataset"):
+            self.dataset = dataset
+        return composed_transform(
+            self.dataset.get(train=train), preprocessors=self.preprocessors, fit=fit  # type: ignore
+        ).to(device)
 
-    def generate(self, n_samples: int, **kwargs) -> pd.DataFrame:
+    def train(self, dataset: Dataset, *, device):
+        self._train(
+            self.get_preprocessed_data(
+                dataset=dataset, train=True, fit=True, device=device
+            )
+        )
+
+    def generate(self, n_samples: int, **kwargs) -> torch.Tensor:
         samples = self._generate(n_samples, **kwargs)
         return composed_inverse_transform(samples, preprocessors=self.preprocessors)
 
@@ -73,6 +94,12 @@ class Model(ABC):
 
     @abstractmethod
     def generate_report(
-        self, *, path: str | Path, dataset: Dataset, generation_options: dict, **kwargs
+        self,
+        *,
+        path: str | Path,
+        dataset: Dataset,
+        generation_options: dict,
+        constraint: Constraint | None = None,
+        **kwargs,
     ):
         pass

@@ -6,8 +6,8 @@ import torch
 
 from src.data import Dataset
 from src.preprocessors.preprocessor import (TensorPreprocessor,
-                                            composed_fit_transform,
-                                            composed_inverse_transform)
+                                            composed_inverse_transform,
+                                            composed_transform)
 from src.report import *
 
 from .model import Model
@@ -22,7 +22,7 @@ class ImageModel(Model):
         X = dataset.get(train=True)
         if not isinstance(X, torch.Tensor):
             raise ValueError(f"dataset {dataset} should be a tensor")
-        X = composed_fit_transform(X, preprocessors=self.tensor_preprocessors)
+        X = composed_transform(X, fit=True, preprocessors=self.tensor_preprocessors)
         self._train(X)
 
     def generate_report(

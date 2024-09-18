@@ -14,6 +14,7 @@ class Constraint:
     forward_guidance: bool = False
     backward_guidance_steps: int = 0
     per_step_self_recurrence_steps: int = 0
+    hard_f: Callable | None = None
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
         return self.strength * self.f(x)

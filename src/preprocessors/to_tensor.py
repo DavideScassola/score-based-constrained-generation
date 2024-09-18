@@ -9,7 +9,10 @@ class ToTensor(Preprocessor):
         self.parameters["names"] = list(x.columns)
 
     def transform(self, df: pd.DataFrame) -> torch.Tensor:
-        return torch.from_numpy(df.values).float()
+        x = torch.from_numpy(df.values)
+        if all(df.dtypes == float):
+            return x.float()
+        return x
 
     def fit_transform(self, x: pd.DataFrame) -> torch.Tensor:
         self.fit(x)

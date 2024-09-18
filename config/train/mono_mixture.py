@@ -27,7 +27,7 @@ model = TabularScoreBasedSde(
         "activation_layer": torch.nn.SiLU,
         "add_prior_score_bias": True,
         "rescale_factor_limit": 5,
-        "batch_norm": True
+        "batch_norm": True,
     },
     optimization=Optimization(
         epochs=600,

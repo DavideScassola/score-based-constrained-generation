@@ -60,7 +60,6 @@ def denoising_score_matching_loss(
     estimated_score = (
         score_model.forward(X=X_t, t=t) if train else score_model(X=X_t, t=t)
     )
-
     if not likelihood_weighting:
         losses = torch.square(estimated_score * std + noise)
     else:
@@ -68,6 +67,42 @@ def denoising_score_matching_loss(
             score_model.sde.g(t=t) ** 2
         )
     return torch.mean(losses)
+
+
+"""
+def direct_denoising_score_matching_loss(
+    *,
+    X: torch.Tensor,
+    score_model: ScoreFunction,
+    train: bool = True,
+    reciprocal_distribution_t: bool = False,
+) -> torch.Tensor:
+    # TODO: maybe it would be better to do this only one time, not every time the loss is computed
+    
+    score_model.denoiser_parametrization = True
+    
+    score_model.train(train)
+    t_size = (len(X), 1)
+
+    t_sampler = (
+        reciprocal_distribution_sampler
+        if reciprocal_distribution_t
+        else uniform_sampler
+    )
+    t = t_sampler(low=EPS, up=1.0, size=t_size, dtype=X.dtype, device=X.device)
+
+    noise = torch.randn_like(X, device=X.device)
+    mean, std = score_model.sde.transition_kernel_mean_std(X=X, t=t)
+    X_t = mean + std * noise
+    
+    estimated_x0 = score_model.forward(X=X_t, t=t) if train else score_model(X=X_t, t=t)
+
+    losses = torch.square(estimated_x0 - X)
+    
+    
+
+    return torch.mean(losses)
+"""
 
 
 def accumulated_denoising_score_matching_loss(*, n: int = 20, **loss_args) -> Tensor:
@@ -124,7 +159,7 @@ def sliced_score_matching_loss(
 def hybrid_ssm_dsm_loss(*, w: float, **kwargs):
     return w * sliced_score_matching_loss(noise=True, **kwargs) + (
         1 - w
-    ) * denoising_score_matching_loss(reciprocal_distribution_t=False, **kwargs)
+    ) * denoising_score_matching_loss(reciprocal_distribution_t=True, **kwargs)
 
 
 def score_matching(
@@ -190,5 +225,4 @@ def score_matching(
     if parameters_ema:
         parameters_ema.copy_to(score_model.parameters())
     loss_plot(losses=epochs_losses)
-
     return epochs_losses

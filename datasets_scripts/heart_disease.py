@@ -1,15 +1,11 @@
 import os
-import sys
 import urllib.request
 from pathlib import Path
 
-sys.path.append(".")
-import numpy as np
 import pandas as pd
 from ucimlrepo import fetch_ucirepo
 
-from src.util import nan_as_category
-
+FILE_NAME = "data/heart_disease.csv"
 SHUFFLE_SEED = 510
 
 
@@ -22,18 +18,18 @@ def csv_path() -> str:
 
 
 def main():
-    # fetch dataset
-    print("Fetching dataset...")
-    adult = fetch_ucirepo(id=2)
+    heart_disease = fetch_ucirepo(id=45)
 
-    # data (as pandas dataframes)
-    df = adult.data.original
+    if heart_disease.data is None:
+        raise ValueError("Dataset not found")
 
-    # find and replace every "."
-    df["income"] = df["income"].str.replace(".", "")
+    X = heart_disease.data.features
+    y = heart_disease.data.targets
+    df = pd.concat([X, y], axis=1)
 
     os.makedirs("data", exist_ok=True)
-    df = df.dropna().to_csv(csv_path(), index=False)
+
+    df.sample(frac=1, random_state=SHUFFLE_SEED).to_csv(csv_path(), index=False)
 
 
 if __name__ == "__main__":

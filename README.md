@@ -1,5 +1,5 @@
-# Score Based Constrained Generation
-Research project on costrained generation with unconditional score based models
+# Zero-Shot Conditioning of Score-Based Generative Models by Neuro-Symbolic Constranints
+Research project on constrained generation with unconditional score-based  generative models
 
 ## Installation
 We suggest creating a python virtual environment with Python3.10, then after activating the environment type:

@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -7,15 +8,17 @@ import seaborn as sns
 import torch
 import tqdm
 from matplotlib import image, rcParams
-from scipy import stats
 from scipy.stats import kstest
 from sklearn.neighbors import KernelDensity
 from torch import Tensor
 
 from src.constants import MINIMUM_SAMPLING_T
 from src.constraints.constraint import Constraint
-from src.util import (l1_divergence, load_json, max_symmetric_D_kl, store_json,
-                      upscale)
+from src.util import (categorical_l1_histogram_distance, l1_divergence,
+                      load_json, max_symmetric_D_kl,
+                      normalized_mutual_information_matrix,
+                      only_categorical_columns, only_numerical_columns,
+                      store_json, upscale)
 
 SAMPLES_NAME = "samples.csv"
 CORRELATIONS_NAME = "correlations"
@@ -45,8 +48,22 @@ def correlation_matrix_similarities(df1: pd.DataFrame, df2: pd.DataFrame):
     c2 = list_corr(df2)
 
     return {
-        # "pearson corr": stats.pearsonr(c1, c2),
-        # "spearman corr": stats.spearmanr(c1, c2),
+        "average l1": np.mean(abs(c1 - c2)),
+        "median l1": np.median(abs(c1 - c2)),
+    }
+
+
+def normalized_mutual_information_matrix_similarities(
+    df1: pd.DataFrame, df2: pd.DataFrame
+):
+    if "constraint_value" in df1.columns:
+        df1 = df1.drop("constraint_value", axis=1)
+        df2 = df2.drop("constraint_value", axis=1)
+
+    c1 = normalized_mutual_information_matrix(df1)
+    c2 = normalized_mutual_information_matrix(df2)
+
+    return {
         "average l1": np.mean(abs(c1 - c2)),
         "median l1": np.median(abs(c1 - c2)),
     }
@@ -66,6 +83,14 @@ COLUMNWISE_NUMERICAL_COMPARISON_STATS = {
 
 GLOBAL_NUMERICAL_COMPARISON_STATS = {
     "correlation matrix similarity": correlation_matrix_similarities
+}
+
+COLUMNWISE_CATEGORICAL_COMPARISON_STATS = {
+    "l1_histogram_distance": categorical_l1_histogram_distance,
+}
+
+GLOBAL_CATEGORICAL_COMPARISON_STATS = {
+    "NMI matrix similarity": normalized_mutual_information_matrix_similarities
 }
 
 CATEGORICAL_STATS = {}
@@ -196,52 +221,57 @@ def histograms_comparison(
             ax=axes[i], data=df_train, label=name_original, **common_args
         )
 
-        bandwidth = min(df_train[c].std(), df_generated[c].std()) / 10
-
-        if df_train[c].std() > 0:
-            kde_plot(
-                df_train[c],
-                ax=axes[i],
-                start=start,  # type: ignore
-                end=end,  # type: ignore
-                kde_args={"bandwidth": bandwidth},
-                plt_args={"color": "blue", "alpha": 0.5, "linestyle": "-"},
+        if is_categorical:
+            ax_generated = sns.histplot(
+                ax=axes[i], data=df_generated, label=name_generated, **common_args
             )
+        else:
+            bandwidth = min(df_train[c].std(), df_generated[c].std()) / 10
 
-        ax_generated = sns.histplot(
-            ax=axes[i], data=df_generated, label=name_generated, **common_args
-        )
-        if df_generated[c].std() > 0:
-            kde_plot(
-                df_generated[c],
-                ax=axes[i],
-                start=start,  # type: ignore
-                end=end,  # type: ignore
-                kde_args={"bandwidth": bandwidth},
-                plt_args={"color": "orange", "alpha": 0.8, "linestyle": "-"},
-            )
+            if df_train[c].std() > 0:
+                kde_plot(
+                    df_train[c],
+                    ax=axes[i],
+                    start=start,  # type: ignore
+                    end=end,  # type: ignore
+                    kde_args={"bandwidth": bandwidth},
+                    plt_args={"color": "blue", "alpha": 0.5, "linestyle": "-"},
+                )
 
-        if constraint and n == 1 and not is_categorical:
-            constraint_plot(
-                start=start,  # type: ignore
-                end=end,  # type: ignore
-                max_y=max(ax_true.get_ylim()[1], ax_generated.get_ylim()[1]),
-                constraint=constraint,
+            ax_generated = sns.histplot(
+                ax=axes[i], data=df_generated, label=name_generated, **common_args
             )
+            if df_generated[c].std() > 0:
+                kde_plot(
+                    df_generated[c],
+                    ax=axes[i],
+                    start=start,  # type: ignore
+                    end=end,  # type: ignore
+                    kde_args={"bandwidth": bandwidth},
+                    plt_args={"color": "orange", "alpha": 0.8, "linestyle": "-"},
+                )
 
-            kde_plot(
-                df_train[c],
-                start=start,  # type: ignore
-                end=end,  # type: ignore
-                kde_args={"bandwidth": bandwidth},
-                plt_args={
-                    "color": "blue",
-                    "alpha": 0.8,
-                    "linestyle": "--",
-                    "label": "original constrained",
-                },
-                constraint=constraint,
-            )
+            if constraint and n == 1 and not is_categorical:
+                constraint_plot(
+                    start=start,  # type: ignore
+                    end=end,  # type: ignore
+                    max_y=max(ax_true.get_ylim()[1], ax_generated.get_ylim()[1]),
+                    constraint=constraint,
+                )
+
+                kde_plot(
+                    df_train[c],
+                    start=start,  # type: ignore
+                    end=end,  # type: ignore
+                    kde_args={"bandwidth": bandwidth},
+                    plt_args={
+                        "color": "blue",
+                        "alpha": 0.8,
+                        "linestyle": "--",
+                        "label": "original constrained",
+                    },
+                    constraint=constraint,
+                )
 
     plt.legend()
     plt.savefig(path / Path(f"{HISTOGRAMS_NAME}.{IMAGE_FORMAT}"))
@@ -253,42 +283,86 @@ def store_samples(*, df_generated: pd.DataFrame, path: Path, name: str = SAMPLES
 
 
 def get_stats(df: pd.DataFrame):
-    df_numerical = df.select_dtypes(include="number")
-    df_categorical = df.select_dtypes(include=["O"])
-    numerical_stats = {
-        k: stat(df_numerical).to_dict() for k, stat in NUMERICAL_STATS.items()
-    }
-    categorical_stats = {
-        k: stat(df_categorical).to_dict() for k, stat in CATEGORICAL_STATS.items()
-    }
+    df_numerical = only_numerical_columns(df)
+    df_categorical = only_categorical_columns(df)
+
+    numerical_stats = (
+        {k: stat(df_numerical).to_dict() for k, stat in NUMERICAL_STATS.items()}
+        if len(df_numerical.columns) > 1
+        else {}
+    )
+
+    categorical_stats = (
+        {k: stat(df_categorical).to_dict() for k, stat in CATEGORICAL_STATS.items()}
+        if len(df_categorical.columns) > 1
+        else {}
+    )
+
     return {**numerical_stats, **categorical_stats}
 
 
 def get_columnwise_comparison_stats(df_train: pd.DataFrame, df_generated: pd.DataFrame):
-    df_numerical = df_train.select_dtypes(include="number")
-    df_numerical_generated = df_generated.select_dtypes(include="number")
+    df1 = df_train
+    df2 = df_generated
+    df1_numerical = only_numerical_columns(df1)
+    df2_numerical = only_numerical_columns(df2)
 
-    numerical_stats = {
-        k: {
-            column: stat(df_numerical[column], df_numerical_generated[column])
-            for column in df_train.columns
+    out = {}
+
+    if len(df1_numerical.columns) > 1:
+        out["numerical_stats"] = {
+            k: {
+                column: stat(df1_numerical[column], df2_numerical[column])
+                for column in df1_numerical.columns
+            }
+            for k, stat in COLUMNWISE_NUMERICAL_COMPARISON_STATS.items()
         }
-        for k, stat in COLUMNWISE_NUMERICAL_COMPARISON_STATS.items()
-    }
 
-    return numerical_stats
+    df1_categorical = only_categorical_columns(df1)
+    df2_categorical = only_categorical_columns(df2)
+
+    if len(df1_categorical.columns) > 1:
+        out["categorical_stats"] = (
+            {
+                k: {
+                    column: stat(df1_categorical[column], df2_categorical[column])
+                    for column in df1_categorical.columns
+                }
+                for k, stat in COLUMNWISE_CATEGORICAL_COMPARISON_STATS.items()
+            }
+            if len(df1_categorical.columns) > 1
+            else {}
+        )
+
+    return out
 
 
 def get_global_comparison_stats(df_train: pd.DataFrame, df_generated: pd.DataFrame):
-    df_numerical = df_train.select_dtypes(include="number")
-    df_numerical_generated = df_generated.select_dtypes(include="number")
+    df_numerical = only_numerical_columns(df_train)
+    df_numerical_generated = only_numerical_columns(df_generated)
 
-    numerical_stats = {
-        k: stat(df_numerical, df_numerical_generated)
-        for k, stat in GLOBAL_NUMERICAL_COMPARISON_STATS.items()
-    }
+    numerical_stats = (
+        {
+            k: stat(df_numerical, df_numerical_generated)
+            for k, stat in GLOBAL_NUMERICAL_COMPARISON_STATS.items()
+        }
+        if len(df_numerical.columns) > 1
+        else {}
+    )
 
-    return numerical_stats
+    df_categorical = only_categorical_columns(df_train)
+    df_categorical_generated = only_categorical_columns(df_generated)
+
+    categorical_stats = (
+        {
+            k: stat(df_categorical, df_categorical_generated)
+            for k, stat in GLOBAL_CATEGORICAL_COMPARISON_STATS.items()
+        }
+        if len(df_categorical.columns) > 1
+        else {}
+    )
+
+    return {"numerical_stats": numerical_stats, "categorical_stats": categorical_stats}
 
 
 def statistics_comparison(
@@ -456,11 +530,34 @@ def summary_report(path: Path):
     stats = load_json(path / STATS_NAME)
     summary_stats = {}
 
-    if "constraint_value" in stats["columnwise_comparison"]["l1_divergence"]:
-        del stats["columnwise_comparison"]["l1_divergence"]["constraint_value"]
-    summary_stats["l1_divergence"] = stats["columnwise_comparison"]["l1_divergence"]
-    
-    if "global_comparison" in stats:
+    l1_div = {}
+    if "numerical_stats" in stats["columnwise_comparison"]:
+        l1_div.update(
+            stats["columnwise_comparison"]["numerical_stats"]["l1_divergence"]
+        )
+    if "categorical_stats" in stats["columnwise_comparison"]:
+        l1_div.update(
+            stats["columnwise_comparison"]["categorical_stats"]["l1_histogram_distance"]
+        )
+    if "l1_divergence" in stats["columnwise_comparison"]:
+        l1_div.update(stats["columnwise_comparison"]["l1_divergence"])
+
+    if "constraint_value" in l1_div:
+        del l1_div["constraint_value"]
+
+    summary_stats["l1_divergence"] = l1_div
+
+    if "numerical_stats" in stats["columnwise_comparison"]:
+        summary_stats["correlations_l1"] = stats["global_comparison"][
+            "numerical_stats"
+        ]["correlation matrix similarity"]["average l1"]
+
+    if "categorical_stats" in stats["columnwise_comparison"]:
+        summary_stats["NMI_l1"] = stats["global_comparison"]["categorical_stats"][
+            "NMI matrix similarity"
+        ]["average l1"]
+
+    if "correlations_l1" in stats["global_comparison"]:
         summary_stats["correlations_l1"] = stats["global_comparison"][
             "correlation matrix similarity"
         ]["average l1"]

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from src.constraints.constraint import Constraint
-from src.util import load_module
+from src.util import get_available_device, load_module
 
 
 @dataclass
@@ -11,6 +11,7 @@ class ConstrainedGenerationConfig:
     generation_options: dict
     name: str | None = None
     seed: int | None = None
+    device: str = get_available_device()
 
 
 def getConfig(path: str) -> ConstrainedGenerationConfig:

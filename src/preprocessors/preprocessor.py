@@ -62,14 +62,18 @@ class TensorPreprocessor(Preprocessor, ABC):
         return self.transform(x)
 
 
-def composed_fit_transform(
-    input: torch.Tensor, *, preprocessors: List[TensorPreprocessor]
+def composed_transform(
+    input: torch.Tensor, fit: bool, *, preprocessors: List[TensorPreprocessor]
 ) -> torch.Tensor:
     if len(preprocessors) == 0:
         return input
-    out = preprocessors[0].fit_transform(input)
+    out = (
+        preprocessors[0].fit_transform(input)
+        if fit
+        else preprocessors[0].transform(input)
+    )
     for p in preprocessors[1:]:
-        out = p.fit_transform(out)
+        out = p.fit_transform(out) if fit else p.transform(out)
     return out
 
 

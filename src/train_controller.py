@@ -22,11 +22,9 @@ def create_model_folder() -> Path:
     return path
 
 
-def store_results(*, config_file: str | Path, config: TrainConfig):
+def store_results(*, config_file: str | Path, config: TrainConfig, postfix: str | None):
     folder = Path(
-        create_experiment_folder(
-            path=create_models_folder(), postfix=getConfig(str(config_file)).name
-        )
+        create_experiment_folder(path=create_models_folder(), postfix=postfix)
     )
     config.model.store(folder)
     shutil.copyfile(config_file, folder / CONFIG_FILE_NAME)
@@ -41,5 +39,5 @@ def run_model_training(config_file: str):
     config = getConfig(config_file)
     if config.seed:
         set_seeds(config.seed)
-    config.model.train(config.dataset)
-    store_results(config_file=config_file, config=config)
+    config.model.train(config.dataset, device=config.device)
+    store_results(config_file=config_file, config=config, postfix=config.name)

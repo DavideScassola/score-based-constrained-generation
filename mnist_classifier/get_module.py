@@ -29,7 +29,7 @@ def mnist_classifier(device=None) -> LeNet5:
     net = LeNet5().eval()
     weights_file = "mnist_classifier/lenet_epoch=12_test_acc=0.991.pth"
     download_if_needed(local=weights_file, url=WEIGHTS_URL)
-    net.load_state_dict(torch.load(weights_file, map_location=device))
+    net.load_state_dict(torch.load(weights_file, map_location=device, weights_only=True))
     net = net.to(device)
 
     # Set requires_grad to False for all parameters

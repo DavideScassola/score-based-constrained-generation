@@ -9,7 +9,7 @@ from src.constraints.real_logic import Product as Logic
 from src.models.score_based.sdes.sampler import EulerMethod
 from src.util import find, names_index_map
 
-model_path = find(str(MODELS_FOLDER), pattern="*white_wine_sliced")
+model_path = find(str(MODELS_FOLDER), pattern="*white_wine_dsm")
 
 i = names_index_map("data/wine_quality_white.csv")
 
@@ -19,9 +19,13 @@ residual_sugar = i["residual sugar"]
 citric_acid = i["citric acid"]
 
 
-GRAD = 50.0
-SCORE_APPROXIMATOR = linear_interpolation
+GRAD = 30.0
+SCORE_APPROXIMATOR = snr
 SEED = 1234
+
+universal_guidance = dict(
+    forward_guidance=True, backward_guidance_steps=0, per_step_self_recurrence_steps=0
+)
 
 predicate = lambda x: Logic.and_(
     Logic.or_(
@@ -37,19 +41,29 @@ predicate = lambda x: Logic.and_(
 
 
 constraint = Constraint(
-    f=lambda x: predicate(x), strength=1.0, gradient_mixer=SCORE_APPROXIMATOR
+    f=lambda x: predicate(x),
+    strength=1.0,
+    gradient_mixer=SCORE_APPROXIMATOR,
+    **universal_guidance,
 )
 
 generation_options = dict(
     sde_solver=EulerMethod(),
     n_samples=5000,
     steps=1000,
-    corrector_steps=1,
-    final_corrector_steps=4000,
+    corrector_steps=2,
+    final_corrector_steps=0,
 )
 
+name = "white_wine_dsm"
+if universal_guidance["forward_guidance"]:
+    name = (
+        name
+        + f"_bw{universal_guidance['backward_guidance_steps']}_rs{universal_guidance['per_step_self_recurrence_steps']}"
+    )
+
 CONFIG = ConstrainedGenerationConfig(
-    name="white_wine",
+    name=name,
     constraint=constraint,
     model_path=model_path,
     generation_options=generation_options,

@@ -15,6 +15,7 @@ class StringToInt(Preprocessor):
         pass
 
     def transform(self, df: pd.DataFrame):
+        # TODO: implement
         pass
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:

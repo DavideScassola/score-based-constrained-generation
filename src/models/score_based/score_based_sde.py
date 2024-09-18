@@ -26,6 +26,7 @@ class ScoreBasedSde(Model):
         score_function_hyperparameters: dict,
         score_matching_loss: Callable = denoising_score_matching_loss,
         optimization: Optimization,
+        load_weights_path: str | None = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -36,6 +37,7 @@ class ScoreBasedSde(Model):
         self.optimization = optimization
         self.score_loss_function = score_matching_loss
         self.train_losses = None
+        self.load_weights_path = load_weights_path
 
     def _train(self, X: torch.Tensor) -> None:
         self.shape = X.data[0].shape
@@ -47,6 +49,9 @@ class ScoreBasedSde(Model):
             device=self.device,
             **self.score_function_hyperparameters,
         )
+        
+        if self.load_weights_path:
+            self.score_model.load_(self.load_weights_path)
 
         self.train_losses = score_matching(
             train_set=X,

@@ -78,7 +78,7 @@ class ScoreFunction(ABC):
     def load_(self, path: str):
         # TODO: using safe tensors would be better
         self.model.load_state_dict(
-            torch.load(f"{path}/{WEIGHTS_FILE}.pth", map_location=self.device)
+            torch.load(f"{path}/{WEIGHTS_FILE}.pth", map_location=self.device, weights_only=True)
         )
 
     def weighted_score_coefficient(self, *, X, t: torch.Tensor) -> Tensor | float:

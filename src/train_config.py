@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.util import load_module
+from src.util import get_available_device, load_module
 
 from .data import Dataset
 from .models.model import Model
@@ -13,6 +13,7 @@ class TrainConfig:
     model: Model
     generation_options: dict
     name: str | None = None
+    device: str = get_available_device()
     seed: int | None = None
 
 
